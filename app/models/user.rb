@@ -73,21 +73,28 @@ class User < ActiveRecord::Base
   end
 
   def as_json(options = {})
-    h = super(:only => [
+    attrs = [
       :username,
       :created_at,
       :is_admin,
       :is_moderator,
-      :karma,
-      :about,
-    ])
+    ]
+
+    if !self.is_admin?
+      attrs.push :karma
+    end
+
+    attrs.push :about
+
+    h = super(:only => attrs)
     h[:avatar_url] = avatar_url
     h
   end
 
   def avatar_url(size = 100)
     "https://secure.gravatar.com/avatar/" +
-      Digest::MD5.hexdigest(self.email.strip.downcase) + "?r=pg&d=mm&s=#{size}"
+      Digest::MD5.hexdigest(self.email.strip.downcase) +
+      "?r=pg&d=identicon&s=#{size}"
   end
 
   def average_karma
@@ -240,11 +247,19 @@ class User < ActiveRecord::Base
     username
   end
 
-  def unban!
+  def unban_by_user!(unbanner)
     self.banned_at = nil
     self.banned_by_user_id = nil
     self.banned_reason = nil
     self.save!
+
+    m = Moderation.new
+    m.moderator_user_id = unbanner.id
+    m.user_id = self.id
+    m.action = "Unbanned"
+    m.save!
+
+    true
   end
 
   def undeleted_received_messages

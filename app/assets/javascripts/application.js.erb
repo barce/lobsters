@@ -188,7 +188,10 @@ var _Lobsters = Class.extend({
     var params = $(form).serializeArray();
     params.push({"name": "preview", "value": "true"});
     $.post($(form).attr("action"), params, function(data) {
-      $(form).closest('.comment').replaceWith($.parseHTML(data));
+      var da = $.parseHTML(data);
+      var ta = $(da).find("textarea");
+      $(form).closest(".comment").replaceWith(da);
+      autosize(ta);
     });
   },
 
@@ -294,6 +297,24 @@ $(document).ready(function() {
     return Lobsters.moderateStory(this);
   }),
 
+  $(document).on("click", "a.comment_folder", function() {
+    $(this).addClass("comment_unfolder").removeClass("comment_folder");
+    var comment = $(this).closest(".comment");
+    comment.addClass("collapsed");
+    comment.nextAll(".comments").each(function() {
+      $(this).addClass("collapsed");
+    });
+  });
+
+  $(document).on("click", "a.comment_unfolder", function() {
+    $(this).addClass("comment_folder").removeClass("comment_unfolder");
+    var comment = $(this).closest(".comment");
+    comment.removeClass("collapsed");
+    comment.nextAll(".comments").each(function() {
+      $(this).removeClass("collapsed");
+    });
+  });
+
   $(document).on("click", "a.comment_replier", function() {
     if (!Lobsters.curUser) {
       Lobsters.bounceToLogin();
@@ -304,13 +325,32 @@ $(document).ready(function() {
     if ($("#reply_form_" + comment.attr("id")).length > 0)
       return false;
 
+    var sel = "";
+    if (window.getSelection)
+      sel = window.getSelection().toString();
+    else if (document.selection && document.selection.type != "Control")
+      sel = document.selection.createRange().text;
+
+    if (sel != "") {
+      var t = "";
+      $.each(sel.split("\n"), function(k, v) {
+        t += (t == "" ? "" : "\n") + "> " + v;
+      });
+      sel = t;
+
+      if (sel != "")
+        sel += "\n\n";
+    }
+
     var replies = comment.nextAll(".comments").first();
     $.get("/comments/" + comment.attr("data-shortid") + "/reply",
     function(data) {
       var reply = $($.parseHTML(data));
       reply.attr("id", "reply_form_" + comment.attr("id"));
       replies.prepend(reply);
-      reply.find("textarea").focus();
+      var ta = reply.find("textarea");
+      ta.focus().text(sel);
+      autosize(ta);
     });
 
     return false;

@@ -20,6 +20,7 @@ class Story < ActiveRecord::Base
 
   validates_length_of :title, :in => 3..150
   validates_length_of :description, :maximum => (64 * 1024)
+  validates_length_of :url, :maximum => 250, :allow_nil => true
   validates_presence_of :user_id
 
   DOWNVOTABLE_DAYS = 14
@@ -39,6 +40,7 @@ class Story < ActiveRecord::Base
     :on => :create
   before_create :assign_initial_hotness
   before_save :log_moderation
+  before_save :fix_bogus_chars
   after_create :mark_submitter, :record_initial_upvote
   after_save :update_merged_into_story_comments
 
@@ -46,7 +48,7 @@ class Story < ActiveRecord::Base
     if self.url.present?
       # URI.parse is not very lenient, so we can't use it
 
-      if self.url.match(/\Ahttps?:\/\/([^\.]+\.)+[a-z]+(\/|\z)/)
+      if self.url.match(/\Ahttps?:\/\/([^\.]+\.)+[a-z]+(\/|\z)/i)
         if self.new_record? && (s = Story.find_similar_by_url(self.url))
           self.already_posted_story = s
           if s.is_recent?
@@ -59,6 +61,10 @@ class Story < ActiveRecord::Base
       end
     elsif self.description.to_s.strip == ""
       errors.add(:description, "must contain text if no URL posted")
+    end
+
+    if !errors.any? && self.url.blank?
+      self.user_is_author = true
     end
 
     check_tags
@@ -113,24 +119,40 @@ class Story < ActiveRecord::Base
   end
 
   def as_json(options = {})
-    h = super(:only => [
+    h = [
       :short_id,
+      :short_id_url,
       :created_at,
       :title,
       :url,
-    ])
-    h[:score] = score
-    h[:comment_count] = comments_count
-    h[:description] = markeddown_description
-    h[:comments_url] = comments_url
-    h[:submitter_user] = user
-    h[:tags] = self.tags.map{|t| t.tag }.sort
+      :score,
+      :upvotes,
+      :downvotes,
+      { :comment_count => :comments_count },
+      { :description => :markeddown_description },
+      :comments_url,
+      { :submitter_user => :user },
+      { :tags => self.tags.map{|t| t.tag }.sort },
+    ]
 
     if options && options[:with_comments]
-      h[:comments] = options[:with_comments]
+      h.push({ :comments => options[:with_comments] })
     end
 
-    h
+    js = {}
+    h.each do |k|
+      if k.is_a?(Symbol)
+        js[k] = self.send(k)
+      elsif k.is_a?(Hash)
+        if k.values.first.is_a?(Symbol)
+          js[k.keys.first] = self.send(k.values.first)
+        else
+          js[k.keys.first] = k.values.first
+        end
+      end
+    end
+
+    js
   end
 
   def assign_initial_hotness
@@ -152,7 +174,7 @@ class Story < ActiveRecord::Base
     # submitter's own comments
     cpoints = self.comments.where("user_id <> ?", self.user_id).
       select(:upvotes, :downvotes).map{|c| c.upvotes + 1 - c.downvotes }.
-      inject(&:+).to_i
+      inject(&:+).to_f * 0.5
 
     # don't immediately kill stories at 0 by bumping up score by one
     order = Math.log([ (score + 1).abs + cpoints, 1 ].max, 10)
@@ -165,7 +187,7 @@ class Story < ActiveRecord::Base
     end
 
     # TODO: as the site grows, shrink this down to 12 or so.
-    window = 60 * 60 * 36
+    window = 60 * 60 * 24
 
     return -((order * sign) + base +
       ((self.created_at || Time.now).to_f / window)).round(7)
@@ -215,16 +237,32 @@ class Story < ActiveRecord::Base
     self.markeddown_description = self.generated_markeddown_description
   end
 
+  def description_or_story_cache(chars = 0)
+    s = if self.description.present?
+      self.markeddown_description.gsub(/<[^>]*>/, "")
+    else
+      self.story_cache
+    end
+
+    if chars > 0
+      # remove last truncated word
+      s = s.to_s[0, chars].gsub(/ [^ ]*\z/, "")
+    end
+
+    HTMLEntities.new.decode(s.to_s)
+  end
+
   def domain
     if self.url.blank?
       nil
     else
       # URI.parse is not very lenient, so we can't use it
       self.url.
-        gsub(/^[^:]+:\/\//, ""). # proto
-        gsub(/\/.*/, "").        # path
-        gsub(/:\d+$/, "").       # possible port
-        gsub(/^www\d*\./, "")    # possible "www3." in host
+        gsub(/^[^:]+:\/\//, "").        # proto
+        gsub(/\/.*/, "").               # path
+        gsub(/:\d+$/, "").              # possible port
+        gsub(/^www\d*\.(.+\..+)/, '\1') # possible "www3." in host unless
+                                        # it's the only non-TLD
     end
   end
 
@@ -254,6 +292,19 @@ class Story < ActiveRecord::Base
 
   def hider_count
     @hider_count ||= HiddenStory.where(:story_id => self.id).count
+  end
+
+  def html_class_for_user(u = nil)
+    c = []
+    if !self.user.is_active?
+      c.push "inactive_user"
+    elsif self.user.is_new?
+      c.push "new_user"
+    elsif self.user_is_author?
+      c.push "user_is_author"
+    end
+
+    c.join("")
   end
 
   def is_downvotable?
@@ -381,6 +432,18 @@ class Story < ActiveRecord::Base
   def record_initial_upvote
     Vote.vote_thusly_on_story_or_comment_for_user_because(1, self.id, nil,
       self.user_id, nil, false)
+  end
+
+  def fix_bogus_chars
+    self.title = self.title.to_s.split("").map{|chr|
+      if chr.ord == 160
+        " "
+      else
+        chr
+      end
+    }.join("")
+
+    true
   end
 
   def score

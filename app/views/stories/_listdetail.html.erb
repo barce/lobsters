@@ -1,6 +1,9 @@
 <li id="story_<%= story.short_id %>" data-shortid="<%= story.short_id %>"
 class="story <%= story.vote && story.vote[:vote] == 1 ? "upvoted" : "" %>
 <%= story.vote && story.vote[:vote] == -1 ? "downvoted" : "" %>
+<%= story.score <= -1 ? "negative_1" : "" %>
+<%= story.score <= -3 ? "negative_3" : "" %>
+<%= story.score <= -5 ? "negative_5" : "" %>
 <%= story.is_hidden_by_cur_user ? "hidden" : "" %>
 <%= story.is_expired? ? "expired" : "" %>">
 <div class="story_liner">
@@ -56,15 +59,17 @@ class="story <%= story.vote && story.vote[:vote] == 1 ? "upvoted" : "" %>
               break_long_words(ms.domain) %></a>
           <% end %>
           <span class="byline">
-            by
-            <a href="/u/<%= ms.user.username %>"
-            <% if ms.user.is_new? %>
-              class="new_user"
-            <% end %>><%= ms.user.username %></a>
-
             <% if @user && @user.show_avatars? %>
-              <img src="<%= ms.user.avatar_url(16) %>" class="avatar">
+              <a href="/u/<%= ms.user.username %>"><img
+                src="<%= ms.user.avatar_url(16) %>" class="avatar"></a>
             <% end %>
+
+            <% if story.user_is_author? %>
+              authored
+            <% end %>
+            by
+            <a href="/u/<%= ms.user.username %>" class="<%=
+              ms.html_class_for_user(@user) %>"><%= ms.user.username %></a>
 
             <%= time_ago_in_words_label(ms.created_at, :strip_about => true) %>
               ago
@@ -72,24 +77,33 @@ class="story <%= story.vote && story.vote[:vote] == 1 ? "upvoted" : "" %>
         <% end %>
       <% end %>
     <% end %>
+
+    <% if !(defined?(single_story) && single_story) && @user &&
+    @user.show_story_previews? %>
+      <% if (sc = story.description_or_story_cache(500)).present? %>
+        <div class="story_content">
+          <%= break_long_words(sc) %>
+        </div>
+      <% end %>
+    <% end %>
+
     <div class="byline">
+      <% if @user && @user.show_avatars? %>
+        <a href="/u/<%= story.user.username %>"><img
+          src="<%= story.user.avatar_url(16) %>" class="avatar"></a>
+      <% end %>
+      <% if story.user_is_author? %>
+        authored
+      <% end %>
       <% if story.previewing %>
         by
-        <a><%= story.user.username %></a>
-        <% if @user && @user.show_avatars? %>
-          <img src="<%= story.user.avatar_url(16) %>" class="avatar">
-        <% end %>
+        <a class="<%= story.html_class_for_user(@user) %>"><%=
+          story.user.username %></a>
         just now
       <% else %>
         by
-        <a href="/u/<%= story.user.username %>"
-        <% if story.user.is_new? %>
-          class="new_user"
-        <% end %>><%= story.user.username %></a>
-
-        <% if @user && @user.show_avatars? %>
-          <img src="<%= story.user.avatar_url(16) %>" class="avatar">
-        <% end %>
+        <a href="/u/<%= story.user.username %>" class="<%=
+          story.html_class_for_user(@user) %>"><%= story.user.username %></a>
 
         <%= time_ago_in_words_label(story.created_at, :strip_about => true) %>
           ago
@@ -143,10 +157,10 @@ class="story <%= story.vote && story.vote[:vote] == 1 ? "upvoted" : "" %>
           </span>
         <% end %>
 
-        <% if defined?(single_story) && single_story %>
-          <% if story.downvotes > 0 %>
-            | <%= story.vote_summary_for(@user).downcase %>
-          <% end %>
+        <% if defined?(single_story) && single_story &&
+        ((story.downvotes > 0 && @user && @user.is_moderator?) ||
+        (story.downvotes >= 3)) %>
+          | <%= story.vote_summary_for(@user).downcase %>
         <% end %>
       <% end %>
     </div>

@@ -44,7 +44,7 @@ Lobsters::Application.routes.draw do
     match "/login/set_new_password" => "login#set_new_password",
       :as => "set_new_password", :via => [:get, :post]
 
-    get "/t/:tag" => "home#tagged", :as => "tag", :format => /html|rss/
+    get "/t/:tag" => "home#tagged", :as => "tag", :format => /html|rss|json/
     get "/t/:tag/page/:page" => "home#tagged"
 
     get "/search" => "search#index"
@@ -86,9 +86,13 @@ Lobsters::Application.routes.draw do
     get "/s/:id/(:title)" => "stories#show", :format => /html|json/
 
     get "/c/:id" => "comments#redirect_from_short_id"
+    get "/c/:id.json" => "comments#show_short_id", :format => "json"
 
     get "/u" => "users#tree"
     get "/u/:username" => "users#show", :as => "user", :format => /html|json/
+
+    post "/users/:username/ban" => "users#ban", :as => "user_ban"
+    post "/users/:username/unban" => "users#unban", :as => "user_unban"
 
     get "/settings" => "settings#index"
     post "/settings" => "settings#update"
@@ -99,6 +103,8 @@ Lobsters::Application.routes.draw do
 
     get "/filters" => "filters#index"
     post "/filters" => "filters#update"
+
+    get "/tags.json" => "tags#index", :format => "json"
 
     post "/invitations" => "invitations#create"
     get "/invitations" => "invitations#index"

@@ -134,6 +134,10 @@ input[type="email"],
 textarea {
 	border: 1px solid #ccc;
 }
+input:focus, textarea:focus {
+	outline-style: solid;
+	outline-width: 2px;
+}
 input[type="checkbox"] {
 	margin-top: 0.5em;
 }
@@ -379,6 +383,10 @@ ol.comments.collapsed ol,
 ol.comments.collapsed li {
 	display: none;
 }
+div.comment.collapsed div.comment_text,
+div.comment.collapsed div.voters {
+	display: none;
+}
 
 ol.search_results {
 	margin-left: 20px;
@@ -526,6 +534,20 @@ li .domain {
 	vertical-align: middle;
 }
 
+li .comment_folder,
+li .comment_unfolder {
+	display: inline-block;
+	font-size: 9pt;
+	letter-spacing: 0.1em;
+	width: 1.4em;
+}
+li .comment_folder:before {
+	content: "[-]";
+}
+li .comment_unfolder:before {
+	content: "[+]";
+}
+
 li .byline {
 	color: #888;
 	font-size: 8.5pt;
@@ -537,7 +559,6 @@ li .byline img.avatar {
 	border-radius: 8px;
 	height: 16px;
 	margin-bottom: 2px;
-	margin-left: 2px;
 	margin-right: 2px;
 	vertical-align: middle;
 	width: 16px;
@@ -552,6 +573,14 @@ li .byline a {
 	color: #888;
 	text-decoration: none;
 }
+/* preserve selection made elsewhere when clicking */
+li .byline a.comment_replier {
+	-moz-user-select: none;
+	-khtml-user-select: none;
+	-webkit-user-select: none;
+	-ms-user-select: none;
+	user-select: none;
+}
 span.new_user, a.new_user,
 li .byline a.new_user {
 	color: green;
@@ -560,6 +589,10 @@ span.inactive_user, a.inactive_user,
 li .byline a.inactive_user {
 	color: gray;
 	text-decoration: line-through;
+}
+span.user_is_author, a.user_is_author,
+li .byline a.user_is_author {
+	color: #6081bd;
 }
 
 li.story.hidden {
@@ -584,6 +617,14 @@ div.story_content {
 
 div.story_content {
 	margin-bottom: 1em;
+}
+ol.stories.list div.story_content {
+	color: #777;
+	max-height: 2.6em;
+	line-height: 1.3em;
+	margin: 0.25em 40px 0.25em 0;
+	overflow: hidden;
+	text-overflow: clip;
 }
 
 div.morelink {

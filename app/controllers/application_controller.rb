@@ -1,12 +1,9 @@
 class ApplicationController < ActionController::Base
   protect_from_forgery
   before_filter :authenticate_user
-  before_filter :send_css_link_header
   before_filter :increase_traffic_counter
 
-  @@_css_link_header = nil
-
-  TRAFFIC_DECREMENTER = 0.25
+  TRAFFIC_DECREMENTER = 0.30
 
   TAG_FILTER_COOKIE = :tag_filters
 
@@ -19,29 +16,6 @@ class ApplicationController < ActionController::Base
     end
 
     true
-  end
-
-  # speed hax
-  @@_css_link_header = nil
-  def send_css_link_header
-    if !Rails.env.development?
-      begin
-        if !@@_css_link_header
-          # is there a better way to find this?
-          j = JSON.parse(File.read(Dir.glob(
-            "#{Rails.root}/public/assets/manifest-*.json").first))
-
-          @@_css_link_header = "</assets/" << j["assets"]["application.css"] <<
-            ">; rel=stylesheet"
-        end
-      rescue => e
-        Rails.logger.error e.inspect
-      end
-
-      if @@_css_link_header
-        response.headers["Link"] = @@_css_link_header
-      end
-    end
   end
 
   def increase_traffic_counter
@@ -60,8 +34,8 @@ class ApplicationController < ActionController::Base
       traffic = traffic_kv.value.to_i + 100
       # every second, decrement traffic by some amount
       traffic -= (100.0 * (now_i - date_kv.value) * TRAFFIC_DECREMENTER).to_i
-      # clamp
-      traffic = [ 100, traffic ].max
+      # clamp to 100, 1000
+      traffic = [ [ 100, traffic ].max, 10000 ].min
 
       @traffic = traffic * 0.01
 
@@ -70,9 +44,9 @@ class ApplicationController < ActionController::Base
 
       date_kv.value = now_i
       date_kv.save!
-    end
 
-    Rails.logger.info "  Traffic level: #{@traffic}"
+      Rails.logger.info "  Traffic level: #{@traffic} (#{traffic})"
+    end
 
     true
   end
@@ -86,6 +60,19 @@ class ApplicationController < ActionController::Base
       end
 
       redirect_to "/login"
+    end
+  end
+
+  def require_logged_in_moderator
+    require_logged_in_user
+
+    if @user
+      if @user.is_moderator?
+        true
+      else
+        flash[:error] = "You are not authorized to access that resource."
+        return redirect_to "/"
+      end
     end
   end
 
